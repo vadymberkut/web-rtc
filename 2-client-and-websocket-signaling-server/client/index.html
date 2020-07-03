@@ -23,6 +23,20 @@
     padding: 2%;
 }
 
+.video-container {
+    display: flex;
+    flex-wrap: nowrap;
+}
+
+.remote-videos {
+    display: flex;
+    flex-wrap: wrap;
+}
+
+.remote-videos video {
+    width: 320px;
+}
+
 button {
     margin: 1em;
 }
@@ -35,7 +49,7 @@ input {
     background: rgb(148, 144, 144);
     text-align: center;
     padding: 2%;
-    position: absolute;
+    /* position: absolute; */
     bottom: 0;
     width: 100%;
 }
@@ -53,17 +67,29 @@ input {
   </h3>
 
   <!--WebRTC related code-->
-  <button type="button" class="btn btn-primary" onclick='createOffer()'>Create
+  <button id="createOfferButton" type="button" class="btn btn-primary">Create
    Offer</button>
   <input id="messageInput" type="text" class="form-control"
    placeholder="message">
-  <button type="button" class="btn btn-primary" onclick='sendMessage()'>SEND</button>
+  <button id="sendDataChannelMessageButton" type="button" class="btn btn-primary">SEND</button>
   
     <h4>Received data channel messages:</h4>
     <div id="dataChannelMessages">
-
     </div>
 
+    <div class="video-container">
+        <div style="margin-right: 1rem;">
+            <h4>My video</h4>
+            <video id="localVideo" autoplay playsinline controls="false" muted></video>
+        </div>
+    
+        <div>
+            <h4>Other video</h4>
+            <div id="remoteVideos" class="remote-videos">
+            </div>
+        </div>
+    </div>
+  
   <script src="client.js"></script>
   <!--WebRTC related code-->
 
