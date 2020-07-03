@@ -1,7 +1,8 @@
 'use strict';
 
-// Taken from, but replaced WebSocket tpo Socket.io
+// Taken from, but replaced WebSocket with Socket.io
 // https://github.com/eugenp/tutorials/tree/master/webrtc/src/main/resources/static
+// https://github.com/googlecodelabs/webrtc-web/blob/master/step-06/js/main.js
 
 // https://socket.io/docs/emit-cheatsheet/
 
@@ -9,9 +10,10 @@
 
     //connecting to our signaling server 
     var socket = io('http://localhost:3000');
+
+    
     socket.on('connect', async function(){
-        console.log('socket.io connect.');
-        console.log("Connected to the signaling server");
+        console.log('socket.io connect. Connected to the signaling server.');
         // socket.send({message: 'test from client'});
         await initialize();
     });
@@ -45,11 +47,26 @@
         socket.send(message);
     }
 
+    let isCaller = false;
+    let isCalee = false;
+
     let peerConnection;
     let dataChannel;
     let input = document.querySelector("#messageInput");
     let createOfferButtonEl = document.querySelector("#createOfferButton");
     let sendDataChannelMessageButtonEl = document.querySelector("#sendDataChannelMessageButton");
+
+    let localVideoEl = document.getElementById('localVideo');
+    let photoEl = document.getElementById('photo');
+    let photoContext = photo.getContext('2d');
+    let dataChannelMessagesEl = document.querySelector('#dataChannelMessages');
+    let trailEl = document.getElementById('trail');
+    let snapBtnEl = document.getElementById('snap');
+    let sendBtnEl = document.getElementById('send');
+    let snapAndSendBtnEl = document.getElementById('snapAndSend');
+
+    let photoContextW;
+    let photoContextH;
 
     createOfferButtonEl.addEventListener('click', function(e) {
         createOffer();
@@ -58,15 +75,19 @@
         sendDataChannelMessage();
     });
 
+    snapBtnEl.addEventListener('click', () => snapPhoto(localVideoEl));
+    sendBtnEl.addEventListener('click', sendPhoto);
+    snapAndSendBtnEl.addEventListener('click', snapAndSend);
 
     async function initialize() {
         let configuration = null;
 
-        peerConnection = new RTCPeerConnection(configuration, {
-            optional : [{
-                RtpDataChannels : true
-            }],
-        });
+        peerConnection = new RTCPeerConnection(configuration);
+        // peerConnection = new RTCPeerConnection(configuration, {
+        //     optional : [{
+        //         RtpDataChannels : true // looks like some olf stuff that prevents from sending bytes through data channel
+        //     }],
+        // });
 
         // Setup ice handling
         peerConnection.onicecandidate = function(event) {
@@ -87,35 +108,25 @@
         peerConnection.onicegatheringstatechange = function(event) {
             console.log('onicegatheringstatechange', event);
         };
-
-        // creating data channel
-        dataChannel = peerConnection.createDataChannel("dataChannel", {
-            reliable : true
-        });
-
-        dataChannel.onerror = function(error) {
-            console.log("dataChannel Error occured on datachannel:", error);
-        };
-
-        // when we receive a message from the other peer, printing it on the console
-        dataChannel.onmessage = function(event) {
-            console.log("dataChannel message:", event.data);
-
-            let elem = document.querySelector('#dataChannelMessages');
-            let newElem = document.createElement('p');
-            newElem.innerText = event.data;
-            elem.appendChild(newElem);
-        };
-
-        dataChannel.onclose = function() {
-            console.log("dataChannel is closed");
+        // called when data channel created by other peer
+        peerConnection.ondatachannel = function(event) {
+            console.log('ondatachannel:', event.channel);
+            // for calee no need to create data channel
+            if(isCalee) {
+                dataChannel = event.channel;
+                setupDataChannel();
+            }
         };
 
         // setup local streams
         const constraints = {'video': true, 'audio': true};
         const localStream = await navigator.mediaDevices.getUserMedia(constraints);
-        const videoElement = document.querySelector('video#localVideo');
-        videoElement.srcObject = localStream;
+        localVideoEl.srcObject = localStream;
+        localVideoEl.onloadedmetadata = function() {
+            photoEl.width = photoContextW = localVideoEl.videoWidth;
+            photoEl.height = photoContextH = localVideoEl.videoHeight;
+            console.log('gotStream with width and height:', photoContextW, photoContextH);
+        };
 
         let audioTracks = localStream.getAudioTracks();
         let videoTracks = localStream.getVideoTracks();
@@ -158,10 +169,13 @@
         }
 
         // create offer
-        createOffer();
+        //createOffer();
     }
 
     function createOffer() {
+        isCaller = true;
+        setupDataChannel();
+
         const offerOptions = {
             offerToReceiveAudio: 1,
             offerToReceiveVideo: 1
@@ -179,6 +193,9 @@
     }
 
     function handleOffer(offer) {
+        isCalee = true;
+        setupDataChannel();
+
         peerConnection.setRemoteDescription(new RTCSessionDescription(offer));
 
         // create and send an answer to an offer
@@ -208,5 +225,118 @@
         input.value = "";
     }
 
+    function setupDataChannel() {
+        let buffer;
+        let bufferCount;
+
+        if(isCaller) {
+            dataChannel = peerConnection.createDataChannel("dataChannel", {
+                reliable : true
+            });
+        }
+
+        if(!dataChannel) {
+            return;
+        }
+
+        dataChannel.onopen = function() {
+            console.log('dataChannel onopen');
+        };
+        dataChannel.onclose = function() {
+            console.log('dataChannel onclose');
+        };
+        dataChannel.onerror = function(error) {
+            console.log("dataChannel Error occured on datachannel:", error);
+        };
+        // when we receive a message from the other peer, printing it on the console
+        dataChannel.onmessage = function(event) {
+            console.log("dataChannel message:", event.data);
+
+            // let newElem = document.createElement('p');
+            // newElem.innerText = event.data;
+            // dataChannelMessagesEl.appendChild(newElem);
+
+            if (typeof event.data === 'string') {
+                buffer = window.buffer = new Uint8ClampedArray(parseInt(event.data));
+                bufferCount = 0;
+                console.log('Expecting a total of ' + buffer.byteLength + ' bytes');
+                return;
+            }
+
+            var data = new Uint8ClampedArray(event.data);
+            buffer.set(data, bufferCount);
+
+            bufferCount += data.byteLength;
+            console.log('count: ' + bufferCount);
+
+            if (bufferCount === buffer.byteLength) {
+                // we're done: all data chunks have been received
+                console.log('Done. Rendering photo.');
+                renderPhoto(buffer);
+            }
+        };
+    }
+
+    function snapPhoto(videoEl) {
+        photoContext.drawImage(videoEl, 0, 0, photoEl.width, photoEl.height);
+    }
+      
+    function sendPhoto() {
+      // Split data channel message in chunks of this byte length.
+      var CHUNK_LEN = 13000; // ~16KB
+      console.log('width and height ', photoContextW, photoContextH);
+      var img = photoContext.getImageData(0, 0, photoContextW, photoContextH);
+      let len = img.data.byteLength;
+      let n = len / CHUNK_LEN | 0;
+      
+      console.log('Sending a total of ' + len + ' byte(s)');
+      
+      if (!dataChannel) {
+        console.error('Connection has not been initiated. Get two peers in the same room first');
+        return;
+      } else if (dataChannel.readyState === 'closed') {
+        console.error('Connection was lost. Peer closed the connection.');
+        return;
+      }
+      
+      dataChannel.send(len);
+      
+      // split the photo and send in chunks
+      for (var i = 0; i < n; i++) {
+        var start = i * CHUNK_LEN,
+        end = (i + 1) * CHUNK_LEN;
+        console.log(start + ' - ' + (end - 1));
+        let uint8ClampedArray = img.data.subarray(start, end); // Uint8ClampedArray
+        let arrayBuffer = uint8ClampedArray.buffer; // ArrayBuffer
+
+        // TODO - for some reason it fails when trying to send bytes, but sends strings
+        dataChannel.send(arrayBuffer);
+      }
+      
+      // send the reminder, if any
+      if (len % CHUNK_LEN) {
+        console.log('last ' + len % CHUNK_LEN + ' byte(s)');
+        dataChannel.send(img.data.subarray(n * CHUNK_LEN));
+      }
+    }
+    
+    function snapAndSend() {
+        snapPhoto();
+        sendPhoto();
+    }
+    
+    function renderPhoto(data) {
+        var canvas = document.createElement('canvas');
+        canvas.width = photoContextW;
+        canvas.height = photoContextH;
+        canvas.classList.add('incomingPhoto');
+        // trail is the element holding the incoming images
+        trailEl.insertBefore(canvas, trailEl.firstChild);
+        
+        var context = canvas.getContext('2d');
+        var img = context.createImageData(photoContextW, photoContextH);
+        img.data.set(data);
+        context.putImageData(img, 0, 0);
+    }
 
 })();

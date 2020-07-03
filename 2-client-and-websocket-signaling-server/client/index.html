@@ -73,10 +73,6 @@ input {
    placeholder="message">
   <button id="sendDataChannelMessageButton" type="button" class="btn btn-primary">SEND</button>
   
-    <h4>Received data channel messages:</h4>
-    <div id="dataChannelMessages">
-    </div>
-
     <div class="video-container">
         <div style="margin-right: 1rem;">
             <h4>My video</h4>
@@ -89,6 +85,18 @@ input {
             </div>
         </div>
     </div>
+    <br/>
+    <div>
+        <canvas id="photo"></canvas>
+        <button id="snap" type="button" class="btn btn-primary">Snap</button>
+        <button id="send" type="button" class="btn btn-primary">Send</button>
+        <button id="snapAndSend" type="button" class="btn btn-primary">Snap & Send</button>
+    </div>
+
+    <h4>Received data channel messages:</h4>
+    <div id="dataChannelMessages">
+    </div>
+
   
   <script src="client.js"></script>
   <!--WebRTC related code-->
